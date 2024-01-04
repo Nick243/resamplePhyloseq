@@ -15,3 +15,5 @@ Imports:
     magrittr,
     phyloseq,
     tibble
+URL: https://github.com/Nick243/resamplePhyloseq
+BugReports: https://github.com/Nick243/resamplePhyloseq/issues
