@@ -1,0 +1,121 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# resamplePhyloseq
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of **resamplePhyloseq** is to perform bootstrap resampling (i.e., sampling with replacement to the same number of samples as the original object) of an existing phyloseq object. A list of bootstrap resampled phyloseq objects is returned. **Users can then iterate additional functions over the list elements** to obtain bootstrap resampled quantities of interest. Parallel processing is implemented via the future and future.apply packages.
+
+## Installation
+
+You can install the development version of resamplePhyloseq from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("Nick243/resamplePhyloseq")
+```
+
+## Example
+
+This basic example highlights the core functionality of the resamplePhyloseq package. 
+
+First, an example phyloseq object is obtained from the phyloseq package. Below we a phyloseq object with 31 samples, 217 taxa (where taxa are rows), and 9 sample variables is generated.
+
+```{r load_data, warning=FALSE, message=FALSE, error=FALSE}
+library(resamplePhyloseq)
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+library(Maaslin2)
+data(enterotype)
+
+ps <- phyloseq::subset_samples(enterotype, ClinicalStatus %in% c("healthy", "obese"))
+ps <- phyloseq::subset_taxa(ps, phyloseq::taxa_sums(ps) > 0)
+phyloseq::sample_data(ps)$ClinicalStatus <- factor(phyloseq::sample_data(ps)$ClinicalStatus, levels = c("healthy", "obese"))
+
+ps <- subset_taxa(ps, Genus != "Bacteria")
+ps <- subset_taxa(ps, Genus != "-1")
+ps <- transform_sample_counts(ps, function(x) x / sum(x))
+ps
+```
+
+<br>
+
+
+Then we run the *resample_phyloseq()* function to generate a list of bootstrap resampled phyloseq objects. Here I only generate n=100 resamples to speed up the computations, but **larger values should be considered** for many/most applications. Run parallel::detectCores() to determine the number of available cores. For projects with a large number of samples, or when many resamples are needed, consider using using parallel::detectCores() - 1. 
+
+We now have a list of resampled phyloseq objects and the number of times a given sample shows up across resamples varies (i.e., we are using the sample data to approximate the population of interest). 
+```{r resample_data, warning=FALSE, message=FALSE, error=FALSE}
+ps_boot_list <- resample_phyloseq(ps_object = ps, resamples = 100, cores = 7, future_seed = 243)
+ps_boot_list[1:2]
+
+table(sample_data(ps_boot_list[[1]])$Sample_ID)
+table(sample_data(ps_boot_list[[2]])$Sample_ID)
+```
+
+<br>
+
+Finally, an example is provided below where an additional user-written function is developed and then iterated over the resampled phyloseq objects to obtain bootstrap resampled estimates of uncertainty. Here I use the default settings (other than the TSS normalization since we already have relative abundance data/proportions) in the Maaslin2 package to generate bootstrap estimates of the differential rankings based on the FDR corrected p-values. For a more detailed description of differential ranking see this [blog post](https://www.nicholas-ollberding.com/post/bootstrap-resampling-for-ranking-differentially-abundant-taxa/). **Any appropriate function could be applied here where bootstrap estimates are needed.** The variation seen here is a bit extreme given the example used. I would not expect such wide 95% CIs in most settings based on my experience using deeper sequencing and larger sample sizes. 
+
+```{r get_ranks, warning=FALSE, message=FALSE, error=FALSE, results='hide'}
+get_ranks <- function(ps_object){
+  m <- Maaslin2(
+    input_data = data.frame(otu_table(ps_object)),
+    input_metadata = data.frame(sample_data(ps_object)),
+    output = "/Users/olljt2/desktop/maaslin2_output",
+    min_abundance = 0.0,
+    min_prevalence = 0.0,
+    normalization = "NONE",
+    transform = "LOG",
+    analysis_method = "LM",
+    fixed_effects = c("ClinicalStatus"),
+    correction = "BH",
+    standardize = FALSE,
+    cores = 1,
+    plot_heatmap = FALSE,
+    plot_scatter = FALSE)
+
+  mas_out <- m$results |>
+    dplyr::filter(metadata == "ClinicalStatus") |>
+    dplyr::select(-qval, -name, -metadata, -N, -N.not.zero) |>
+    dplyr::arrange(pval) |>
+    dplyr::mutate(qval = p.adjust(pval, method = "fdr"),
+                  p_rank = rank(pval))
+  return(mas_out)
+}
+
+boot_ranks <- lapply(ps_boot_list, get_ranks) 
+boot_ranks_df <- bind_rows(boot_ranks, .id = "column_label")
+```
+```{r get_pvals, warning=FALSE, message=FALSE, error=FALSE}
+pval_ranks_df <- boot_ranks_df |>
+  dplyr::group_by(feature) |>
+  dplyr::summarise(median_p_rank = round(quantile(p_rank, prob = (0.5)), 0),
+                   lcl_p_rank = round(quantile(p_rank, prob = (0.025)), 0),
+                   ucl_p_rank = round(quantile(p_rank, prob = (0.975)), 0),
+                   min_p_rank = min(p_rank),
+                   max_p_rank = max(p_rank),
+                   p_rank_95_ci = paste("(", lcl_p_rank, "; ", ucl_p_rank, ")", sep = "")) |>
+  dplyr::select(feature, median_p_rank, p_rank_95_ci, min_p_rank, max_p_rank) |>
+  dplyr::ungroup() |>
+  dplyr::arrange(median_p_rank, min_p_rank)
+
+head(pval_ranks_df)
+```
+
+
+

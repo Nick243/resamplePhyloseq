@@ -1,3 +1,11 @@
+#' Obtain a single bootstrap resample.
+#'
+#' @param ps_object An existing phyloseq object containing at least sample_data and otu_table elements where the taxa are assumed to be rows.
+#'
+#' @return A bootstrap resampled phyloseq object
+#' @export
+#'
+#' @examples
 ps_boot <- function(ps_object){
 
   '%>%' <- magrittr::'%>%'
