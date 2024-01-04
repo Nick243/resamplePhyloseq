@@ -1,12 +1,10 @@
 Package: resamplePhyloseq
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: Perform bootstrap resampling on an existing phyloseq object
+Version: 0.0.1
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("Nicholas", "Ollberding", , "Nicholas.ollberding@cchmc.org", role = c("aut", "cre"))
+Description: This package performs bootstrap resampling (i.e., sampling with replacement to the same number of samples as the original object) of an existing phyloseq object. A list of bootstrap resampled phyloseq objects is returned allowing users to iterate additional functions over the list elements to obtain bootstrap estimates of quantities of interest. Parallel processing is implemented via the future and future.apply packages.
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
